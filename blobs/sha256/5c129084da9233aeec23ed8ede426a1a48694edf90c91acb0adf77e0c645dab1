@@ -1,0 +1,45 @@
+#!/bin/sh
+# DIEM staking activity by fixed block window.
+# Input  : $IN_events  canonical diem-stake-events NDJSON, one row per line:
+#          {"block":N,"txHash":"0x..","logIndex":N,"user":"0x..","amount":"<decimal wei>","kind":"stake|unstake"}
+# Output : $OUT_DIR/windows.csv, one row per 1,296,000-block window (window = floor(block/1296000)),
+#          columns: window_start_block,window_end_block,stakes,unstakes,diem_staked_wei,diem_unstaked_wei,net_wei,distinct_addresses
+# Exactness: amounts are decimal strings, summed digit by digit in awk (no floating point anywhere); the signed net is
+#          computed with bc. Counts and block numbers are < 2^53 so awk integers are exact for them.
+# Determinism: LC_ALL=C TZ=UTC, no clock, no network, rows sorted by window, LF endings.
+set -eu
+export LC_ALL=C TZ=UTC
+W=1296000
+mkdir -p "$OUT_DIR"
+awk -v W="$W" '
+function add(a, b,    i, j, c, s, r, d) {            # decimal-string addition, non-negative operands
+  i = length(a); j = length(b); c = 0; r = ""
+  while (i > 0 || j > 0 || c > 0) {
+    d = c
+    if (i > 0) { d += substr(a, i, 1) + 0; i-- }
+    if (j > 0) { d += substr(b, j, 1) + 0; j-- }
+    r = (d % 10) r; c = (d >= 10) ? 1 : 0
+  }
+  return (r == "") ? "0" : r
+}
+{
+  s = $0
+  sub(/^\{"block":/, "", s); blk = s; sub(/,.*/, "", blk)
+  u = $0; sub(/.*"user":"/, "", u); sub(/".*/, "", u)
+  a = $0; sub(/.*"amount":"/, "", a); sub(/".*/, "", a)
+  k = ($0 ~ /"kind":"stake"\}$/) ? "stake" : "unstake"
+  w = int(blk / W)
+  seen_w[w] = 1
+  if (k == "stake") { st[w]++; sw[w] = add((w in sw) ? sw[w] : "0", a) }
+  else              { un[w]++; uw[w] = add((w in uw) ? uw[w] : "0", a) }
+  key = w SUBSEP u
+  if (!(key in addr)) { addr[key] = 1; nd[w]++ }
+}
+END {
+  for (w in seen_w) printf "%d\t%d\t%d\t%s\t%s\t%d\n", w, st[w] + 0, un[w] + 0, ((w in sw) ? sw[w] : "0"), ((w in uw) ? uw[w] : "0"), nd[w]
+}' "$IN_events" | sort -n -k1,1 | while IFS='	' read -r w st un sw uw nd; do
+  net=$(printf '%s - %s\n' "$sw" "$uw" | bc)
+  printf '%s,%s,%s,%s,%s,%s,%s,%s\n' "$((w * W))" "$((w * W + W - 1))" "$st" "$un" "$sw" "$uw" "$net" "$nd"
+done > "$OUT_DIR/body.tmp"
+{ echo "window_start_block,window_end_block,stakes,unstakes,diem_staked_wei,diem_unstaked_wei,net_wei,distinct_addresses"; cat "$OUT_DIR/body.tmp"; } > "$OUT_DIR/windows.csv"
+rm -f "$OUT_DIR/body.tmp"
