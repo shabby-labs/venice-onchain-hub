@@ -1,17 +1,46 @@
-# Research Commons hub (template, next format)
+# venice-onchain-hub
 
-> **Research Commons 1.0, release candidate.** This branch is the template for hubs on the 1.0 format (frozen at
-> `v1.0.0-rc.1`). `.github/workflows/hub-check.yml` pins the tool release `v1.0.0-rc.1` by commit, and `docs/CLI-CONTRACT.md`
-> states what the template needs from the tool. **Start new hubs here.** The `main` branch is the old 0.4 alpha template,
-> which gets security fixes only. Feedback on the release candidate:
-> [research-commons#241](https://github.com/research-common/research-commons/issues/241).
+A [Research Commons](https://github.com/research-common/research-commons) hub (1.0 format, tool pinned at
+`v1.0.0-rc.1`) for **Venice on-chain data on Base**: captured chain data, the workflows that derive results from
+it, and those results, each one signed.
 
-> **Template.** Click **Use this template** to create a hub for your topic, then rename it in this heading.
+> **Pilot hub.** This hub is maintained by its publishers (shabby-labs). The Research Commons project doesn't endorse it,
+> and its contents are not reference data. As with every hub, what you trust is your own reader policy.
 
-A **Research Commons hub** is a git repository that holds signed statements and the bytes they talk about.
-It contains no code. The `commons` tool lives in its own repository,
-[research-common/research-commons](https://github.com/research-common/research-commons), and you update it
-there, never through a hub.
+## What is here
+
+| | |
+|---|---|
+| Publisher identity | fixed-root identity `57f2d9f6db5cd5536a8805218f294f486481ed228f861f490d3a3e3f658b4441` (root on a hardware device); statements are signed by a worker key acting for it under a grant |
+| Collection | **Venice DIEM staking (Base)**, resource `61851d1a3b7e5f9379d64928284b687da730cbbe32656e33939c1c62c092fe99`, curated |
+| Dataset | `diem-stake-events`: every DIEM `Staked`/`Unstaked` event from the staking contract's deployment through Base block 58,900,000 (30,091 rows, NDJSON), `observed`, class `exact-bytes`, licence CC0-1.0 |
+| Analysis | *DIEM staking activity by window*: a pinned workflow (`alpine:3.20` by digest, no network) that counts stakes/unstakes, sums wei and counts distinct addresses per 1,296,000-block window; output CC-BY-4.0, code Apache-2.0 |
+| Selection | curated by the publisher; the collection's editions say what is a member |
+
+```bash
+git clone https://github.com/shabby-labs/venice-onchain-hub && commons init mystore && cd mystore
+commons pull ../venice-onchain-hub --from-checkout
+commons show 61851d1a3b7e5f9379d64928284b687da730cbbe32656e33939c1c62c092fe99
+commons verify --rerun --exec-policy <your policy> sha256:7181144263925f455ba2133f1f47046f32b66e61cf806102108f9d6a8f92cbc1
+```
+
+**Reproduce it.** The analysis reads `sole author · not re-derived` until a second, independent key re-runs the
+workflow on the same input and publishes the same bytes (then `T0`). Independent re-derivations and
+independent captures of the same block range are welcome as pull requests.
+
+### Known display issue (1.0.0-rc.1): the dataset's licence reads `unknown`
+
+`diem-stake-events` is an `observed` capture of public chain data. Its signed statement declares
+`licence: CC0-1.0`, `replication: bytes` and `availability: permitted / obtainable`, and those fields are
+in the signed bytes. The 1.0.0-rc.1 `commons show` / `list` / `explain` builds single-party defaults from
+`authored` statements only, so for an `observed` blob it prints `licence: unknown`. This is a display gap in
+the tool, not a missing declaration, and it needs no republishing: a reader with the fix will show CC0-1.0 for
+the same statement. Until then, read the statement body (`commons show <statement id>`). The derived CSV, the
+workflow and the step code are `authored` and display their licences normally.
+
+---
+
+*The rest of this README is the hub template's general documentation.*
 
 ## What is in a hub
 
